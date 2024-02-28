@@ -1,62 +1,62 @@
 ### SVA detects batch effectS and unknown noise (method 2)
 
 # --------------------------------------------------------------------------- IMPORT LIBRARIES
-
 library(sva)
 library(limma)
 library(pheatmap)
 
-# --------------------------------------------------------------------------- MAKE META FOR E/ CELL TYPE
+# --------------------------------------------------------------------------- IMPORT  
+setwd('/gpfs/gibbs/pi/huckins/ekw28/bulkRNAseq/ghre_lep_sema_RNAseq/3_DEG')
 
-# meta.iGABA <- subset(metadata.df.iGABA, select=c('Donor', 'Treatment', 'Well' ))
-# meta.iGlut <- subset(metadata.df.iGlut, select=c('Donor', 'Treatment', 'Well' ))
-# meta.iAstro <- subset(metadata.df.iAstro, select=c('Treatment', 'Well' )) # only have 1 donor
-# add batch col
-#meta.iGABA$batch <- 1
-#meta.iGlut$batch <- 1
-#meta.iAstro$batch <- 2
+# metas
+meta.iGABA <- read_csv('/gpfs/gibbs/pi/huckins/ekw28/bulkRNAseq/ghre_lep_sema_RNAseq/3_DEG/iGABA_meta_for_SVA.csv')
+meta.iGlut <- read_csv('/gpfs/gibbs/pi/huckins/ekw28/bulkRNAseq/ghre_lep_sema_RNAseq/3_DEG/iGlut_meta_for_SVA.csv')
+meta.iAstro <- read_csv('/gpfs/gibbs/pi/huckins/ekw28/bulkRNAseq/ghre_lep_sema_RNAseq/3_DEG/iAstro_meta_for_SVA.csv')
 
-## use combined meta, add batch, lib size, norm factors cols
-metadata.df$batch <- NA
-metadata.df$batch[metadata.df$cellType == 'iGABA' | metadata.df$cellType == 'iGlut'] <- 1
-metadata.df$batch[metadata.df$cellType == 'iAstro'] <- 2
+# DGE objects
 
+# gene counts after cpm normalization
 
-#### should i be running this in each cell type separately? 
-metadata.df$lib.size <- data.dge.all$samples$lib.size/1000000
-metadata.df$norm.factors <- data.dge.all$samples$norm.factors
+# --------------------------------------------------------------------------- ADD BATCH AND NORM FACTORS
+# add batch, lib size, norm factors cols, etc. as needed
+
+meta.iGABA$lib.size <- data.dge.iGABA$samples$lib.size/1000000
+meta.iGlut$lib.size <- data.dge.iGlut$samples$lib.size/1000000
+meta.iAstro$lib.size <- data.dge.iAstro$samples$lib.size/1000000
+
+meta.iGABA$norm.factors <- data.dge.iGABA$samples$norm.factors
+meta.iGlut$norm.factors <- data.dge.iGlut$samples$norm.factors
+meta.iAstro$norm.factors <- data.dge.iAstro$samples$norm.factors
 
 # --------------------------------------------------------------------------- RUN SVA F(X)
-
-runSVA <- function(data.dge, meta.df, gene_counts_aftercpm.df) {
+runSVA <- function(data.dge, meta.df, gene_counts_aftercpm.df, output_prefix) {
   
-  # Update metadata with library size and normalization factors
-  #meta.df$lib.size <- data.dge[["samples"]][["lib.size"]]/1000000
-  #meta.df$norm.factors <- data.dge[["samples"]][["norm.factors"]]
-  
-
   # Create models
-  mod <- model.matrix(~ Treatment + batch + lib.size + norm.factors + Well, meta.df)
-  mod0 <- model.matrix(~ batch + lib.size + norm.factors, meta.df)
+  mod <- model.matrix(~ Treatment + lib.size , meta.df)
+  mod0 <- model.matrix(~ lib.size, meta.df)
   
   # Run sva to determine the number of surrogate variables
   n.sv <- num.sv(gene_counts_aftercpm.df, mod, method="leek", B = 20)
-  print(head(n.sv))
+  print(paste("Estimated number of SVs:", n.sv))
   
   # Estimate surrogate variables
-  svobj <- svaseq(as.matrix(gene_counts_aftercpm.df), mod, mod0, n.sv=4) # Adjust n.sv based on previous results if necessary
+  svobj <- svaseq(as.matrix(gene_counts_aftercpm.df), mod, mod0, n.sv=n.sv)
   
   # Include SVs into metadata
   svobj$sv <- as.data.frame(svobj$sv)
   meta_sv.df <- cbind(meta.df, svobj$sv)
   
-  # Reset formula with SVs included
-  form <- as.formula(paste("~ group + batch + lib.size + norm.factors", paste(colnames(svobj$sv), collapse=" + "), sep=" + "))
+  # Save the enhanced metadata with SVs
+  output_path <- paste0("/gpfs/gibbs/pi/huckins/ekw28/bulkRNAseq/ghre_lep_sema_RNAseq/3_DEG/", output_prefix, "_meta_with_SVs.csv")
+  write.csv(meta_sv.df, output_path, row.names = FALSE)
+  
+  ## Reset formula with SVs included
+  form <- as.formula(paste("~ lib.size", paste(colnames(svobj$sv), collapse=" + "), sep=" + "))
   
   # Plot correlation matrix with surrogate variables
   C <- canCorPairs(form, meta_sv.df)
   graphics.off()
-  pheatmap(
+  p <- pheatmap(
     C, 
     color = hcl.colors(50, "YlOrRd", rev = TRUE),
     fontsize = 8,
@@ -64,10 +64,18 @@ runSVA <- function(data.dge, meta.df, gene_counts_aftercpm.df) {
     cellwidth = unit(0.4, "cm"),
     cellheight = unit(0.4, "cm")
   )
+  
+  # Save the plot
+  plot_path <- paste0("/gpfs/gibbs/pi/huckins/ekw28/bulkRNAseq/ghre_lep_sema_RNAseq/3_DEG/", output_prefix, "_correlation_matrix.png")
+  png(plot_path)
+  print(p)
+  dev.off()
 }
+
+
 
 # --------------------------------------------------------------------------- RUN SVA
 
-runSVA(data.dge.iAstro, meta.iAstro, gene_counts_aftercpm.df.iAstro)
-runSVA(data.dge.iGlut, meta.iGlut, gene_counts_aftercpm.df.iGlut)
-runSVA(data.dge.iGABA, meta.iGABA, gene_counts_aftercpm.df.iGABA)
+runSVA(data.dge.iAstro, meta.iAstro, gene_counts_aftercpm.df.iAstro, 'iAstro_SVA')
+runSVA(data.dge.iGlut, meta.iGlut, gene_counts_aftercpm.df.iGlut, 'iGlut_SVA')
+runSVA(data.dge.iGABA, meta.iGABA, gene_counts_aftercpm.df.iGABA, 'iGABA_SVA')
