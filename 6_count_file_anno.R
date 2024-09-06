@@ -4,8 +4,12 @@
 library(tidyverse)
 library(data.table)
 
+#dirs 
+base_dir <- sprintf('/gpfs/gibbs/pi/huckins/ekw28/')
+counts_dir <- sprintf('/gpfs/gibbs/pi/huckins/ekw28/bulkRNAseq/sema_dose_curve_0924/data/3_counts/count_matrices/')
+
 # load raw counts data 
-counts <- data.frame(fread("RawCountMatrix_final.txt"))
+counts <- read.csv(paste0(counts_dir, 'RawCountMatrix_final.txt'), sep='\t')
 
 ######## option 1: get gene names using Carina's file ########
 anno <- read.csv("/gpfs/gibbs/pi/huckins/ekw28/resources")  # message Carina for this file if you don't already have it
