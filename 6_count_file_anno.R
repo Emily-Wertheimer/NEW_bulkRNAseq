@@ -29,4 +29,4 @@ anno <- read.csv("/gpfs/gibbs/pi/huckins/ekw28/resources")  # message Carina for
 anno <- anno[,c(10,14)]
 colnames(anno) <- c("Gene_name", "GeneID")
 counts <- merge(anno, counts, by="GeneID")
-write.table(counts, "Count_Matrix_Annotated.txt", quote=F, row.names=F)
+write.table(counts, file = paste0(counts_dir, 'Count_Matrix_Annotated.txt'), quote = FALSE, row.names = FALSE, sep = "\t")
